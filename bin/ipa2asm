@@ -1,0 +1,43 @@
+#!/usr/bin/env python
+import os
+import re
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+import zipfile
+
+def preexec_fn():
+    # Python installs a SIGPIPE handler by default. This is usually not what
+    # non-Python subprocesses expect.
+    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+
+arg0 = os.path.basename(sys.argv[0])
+if len(sys.argv) < 2:
+    sys.stderr.write("Usage:\n    %s ipa [asm]\n" % arg0)
+    sys.exit(1)
+
+try:
+    ipa = sys.argv[1]
+    asm = sys.argv[2] if len(sys.argv) >= 3 else None
+    with zipfile.ZipFile(ipa) as zip:
+        app_dir = next(n for n in zip.namelist() if n.endswith('.app/'))
+        bin_name = re.search('Payload/(.*).app', app_dir).group(1)
+        bin_path = os.path.join(app_dir, bin_name)
+        tmp_dir = tempfile.mkdtemp()
+        bin_abs_path = zip.extract(bin_path, tmp_dir)
+        with open(asm, "w") if asm else sys.stdout as output:
+            p1 = subprocess.Popen(['otool', '-tv', bin_abs_path],
+                stdout=subprocess.PIPE, bufsize=-1, preexec_fn=preexec_fn)
+            p2 = subprocess.Popen('c++filt', stdin=p1.stdout,
+                stdout=output, bufsize=-1, preexec_fn=preexec_fn)
+            p1.stdout.close()
+            p2.wait()
+        shutil.rmtree(tmp_dir)
+except OSError, e:
+    sys.stderr.write("%s: can't execute otool/c++filt (%s)\n" % (arg0, e))
+except StopIteration:
+    sys.stderr.write("%s: invalid ipa file, app directory not found\n" % arg0)
+except SyntaxWarning, e:
+    sys.stderr.write("%s: %s\n" % (arg0, e))

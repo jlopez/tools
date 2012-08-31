@@ -1,0 +1,2 @@
+PATH=~/bin:$PATH
+function cdup() { cd `cdup.py "$@"`; }
