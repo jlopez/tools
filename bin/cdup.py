@@ -16,5 +16,5 @@ while True:
     break
   cwd = os.path.abspath(os.path.join(cwd, '..'))
   if cwd == '/':
-    print '/'
+    print '.'
     break
