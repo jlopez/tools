@@ -1,0 +1,41 @@
+#!/usr/bin/env python
+import os
+import re
+import socket
+import sys
+
+def usage():
+    print "usage: set-host HOST ALIAS"
+    sys.exit(1)
+
+REGEX = re.compile(r'^\s*(\d+(?:\.\d+){3})\s+(\S+)\s*$')
+def remove_entry(line):
+    match = REGEX.match(line)
+    return match is None or match.group(2) != host
+
+argc = len(sys.argv)
+if not argc in (2, 3):
+    usage()
+
+if not os.access("/etc/hosts", os.W_OK):
+    print >>sys.stderr, "set-host: no write access to /etc/hosts, use sudo?"
+    sys.exit(1)
+
+ip = None
+host = sys.argv[1]
+if argc == 3:
+    alias = sys.argv[2]
+    try:
+        ip = socket.gethostbyname(alias)
+    except socket.gaierror, e:
+        print >>sys.stderr, "set-host: %s" % e
+        sys.exit(1)
+
+with open("/etc/hosts", "r") as f:
+    lines = filter(remove_entry, f.readlines())
+
+if ip:
+    lines.append("%s %s\n" % (ip, host))
+
+with open("/etc/hosts", "w") as f:
+    f.write(''.join(lines))
