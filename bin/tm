@@ -1,0 +1,78 @@
+#!/usr/bin/env python
+import os
+import subprocess
+import sys
+import xattr
+
+XATTR_NAME = 'com.apple.metadata:com_apple_backup_excludeItem'
+XATTR_VALUE = 'bplist00_\x10\x11com.apple.backupd\x08\x00\x00\x00\x00\x00\x00\x01\x01\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x1c'
+
+def tm_on(paths):
+    for path in paths:
+        try:
+            xattr.removexattr(path, XATTR_NAME)
+        except EnvironmentError, e:
+            print >>sys.stderr, "tm: %s: %s" % (path, e.strerror)
+
+def tm_off(paths):
+    for path in paths:
+        try:
+            xattr.setxattr(path, XATTR_NAME, XATTR_VALUE)
+        except EnvironmentError, e:
+            print >>sys.stderr, "tm: %s: %s" % (path, e.strerror)
+
+def get_path_parents(path):
+    while True:
+        yield path
+        parent, _ = os.path.split(os.path.abspath(path))
+        if parent == path:
+            break
+        path = parent
+
+def has_attr(path):
+    try:
+        rv = xattr.getxattr(path, XATTR_NAME)
+        return rv is not None
+    except KeyError:
+        return False
+
+def tm_status(paths):
+    def is_excluded(path):
+        try:
+            return next(p for p in get_path_parents(path) if has_attr(p))
+        except:
+            return None
+
+    argless = not paths
+    if argless:
+        paths = ['.'] if is_excluded('.') else sorted(os.listdir('.'))
+    for path in paths:
+        excluded_parent = is_excluded(path)
+        if excluded_parent:
+            if excluded_parent == path:
+                print "X  %s" % path
+            else:
+                print "X  %s (excluded at %s)" % (path, excluded_parent)
+        else:
+            print "   %s" % path
+
+def usage():
+    print >>sys.stderr, ('usage: tm CMD OPTIONS...\n\n'
+      '\ton  PATH      enable time machine for PATH\n'
+      '\toff PATH      disable time machine for PATH\n'
+      '\tstatus [PATH] inquire status of PATH or current dir of omitted\n'
+    )
+    sys.exit(1)
+
+if len(sys.argv) <= 1:
+    usage()
+
+cmd = sys.argv[1]
+if cmd in [ 'on', 'off', 'status' ]:
+    args = sys.argv[2:]
+    if not args and cmd != 'status':
+        usage()
+    fn = globals()['tm_%s' % cmd]
+    sys.exit(fn(args))
+else:
+    usage()
